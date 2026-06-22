@@ -19,12 +19,11 @@ state-changing playbook executes.
 2. Read `investigations/<slug>/*.md`. If no diagnosis exists, stop and tell
    the user to run `/diagnose` first.
 3. Delegate to the specialist sub-agent that owns this domain. The specialist
-   will:
-   - Match the diagnosis against pre-built AAP templates (Mode A in
-     `playbook-executor`), OR
-   - Generate a fresh ad-hoc remediation playbook and run it via the
-     `adhoc-fix-job` template (Mode B).
-4. The specialist MUST present the proposed playbook + target hosts to the
+   will ask `playbook-executor` to match the diagnosis against a pre-built
+   remediation template in the AAP catalog (`fix-<domain>-<purpose>`). If no
+   suitable template exists, the specialist must STOP and tell the user that
+   an operator needs to register one — do not improvise.
+4. The specialist MUST present the proposed template + target hosts to the
    user and wait for an explicit "yes" / "execute" before invoking
    `playbook-executor`.
 5. After execution, save the report to

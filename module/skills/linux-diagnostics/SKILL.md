@@ -1,5 +1,5 @@
 ---
-description: RHEL / generic Linux diagnostic playbooks for the `sre-linux` sub-agent. Covers host health, systemd services, disk/filesystem, and performance. All playbooks are read-only; remediation is generated separately and run via `adhoc-fix-job`.
+description: RHEL / generic Linux diagnostic playbooks for the `sre-linux` sub-agent. Covers host health, systemd services, disk/filesystem, and performance. All playbooks are read-only; remediation is launched via a pre-registered `fix-linux-*` AAP job template.
 ---
 
 # Linux Diagnostics
@@ -44,8 +44,10 @@ then invoke `playbook-executor`.
 | `playbooks/rhel_disk_diagnose.yml` | `df` alarms, filesystem pressure, inode exhaustion | `diag-linux-disk` |
 | `playbooks/rhel_perf_snapshot.yml` | high load avg, CPU/IO contention without obvious cause | `diag-linux-perf` |
 
-If no AAP template matches the situation precisely, generate a fresh
-playbook on disk and run it via `adhoc-fix-job` (Mode B in `playbook-executor`).
+If no AAP template matches the situation precisely, STOP and tell the user.
+`playbook-executor` only launches pre-registered templates — ask an operator
+to register one using the `diag-linux-<purpose>` or `fix-linux-<purpose>`
+naming convention, then retry.
 
 ## Output
 

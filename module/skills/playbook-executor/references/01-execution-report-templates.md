@@ -9,7 +9,7 @@ Read this reference when generating Phase 3 execution reports or output template
 ```json
 {
   "id": 1235,
-  "name": "adhoc-fix-job",
+  "name": "fix-linux-disk-cleanup",
   "status": "successful",
   "started": "2026-02-24T15:35:02Z",
   "finished": "2026-02-24T15:40:25Z",
@@ -62,7 +62,7 @@ Read this reference when generating Phase 3 execution reports or output template
 **Duration**: 5m 23s
 **Started**: 2026-02-24 15:35:02 UTC
 **Completed**: 2026-02-24 15:40:25 UTC
-**Job Template**: adhoc-fix-job
+**Job Template**: fix-linux-disk-cleanup
 **Playbook**: playbooks/remediation/fix-disk-usage.yml
 **Issue**: INC-20260224-001 — High disk usage on web tier
 **AAP URL**: [View in AAP](https://aap.example.com/#/jobs/playbook/1235)

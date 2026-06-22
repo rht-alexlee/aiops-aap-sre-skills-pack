@@ -6,12 +6,17 @@ Shared facts every sub-agent should assume unless told otherwise.
 
 - AAP Web UI base URL is read from `AAP_BASE_URL`; link every job report to
   `${AAP_BASE_URL}/#/jobs/playbook/<job-id>`.
-- The catch-all template for newly generated remediation playbooks is
-  `adhoc-fix-job`. It MUST have `ask_variables_on_launch=true` and
-  `ask_limit_on_launch=true`.
-- Pre-built diagnostic templates follow the naming pattern
+- `playbook-executor` only runs pre-registered AAP job templates. There is no
+  ad-hoc execution path — if no template matches, the sub-agent stops and
+  asks an operator to register one.
+- Diagnostic templates follow the naming pattern
   `diag-<domain>-<purpose>` (e.g. `diag-linux-health-check`).
-- Pre-built remediation templates follow `fix-<domain>-<purpose>`.
+- Remediation templates follow `fix-<domain>-<purpose>`
+  (e.g. `fix-linux-disk-cleanup`).
+- Every template MUST have credentials attached, an inventory selected,
+  `become_enabled: true` for remediation, and ideally
+  `ask_variables_on_launch: true` + `ask_limit_on_launch: true` so the
+  executor can pass incident context and host targets at launch time.
 
 ## Inventories
 

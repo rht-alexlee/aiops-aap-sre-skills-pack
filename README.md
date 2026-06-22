@@ -14,9 +14,11 @@ ops_orchestrator
 ```
 
 All AAP execution flows through `module/skills/playbook-executor/` —
-sub-agents **never** call AAP MCP tools directly. Newly generated remediation
-playbooks land on the `adhoc-fix-job` template; pre-built workflows are
-matched by name + description against the AAP job-template catalog.
+sub-agents **never** call AAP MCP tools directly. The executor only launches
+**pre-registered AAP job templates**, matched by name + description against
+the AAP catalog. If no template matches the sub-agent's intent, it stops and
+asks an operator to register one (using the `diag-<domain>-<purpose>` /
+`fix-<domain>-<purpose>` naming convention).
 
 ## Layout
 
@@ -251,9 +253,9 @@ ansible-playbook -i inventory \
 1. Drop the playbook in `module/skills/<skill>/playbooks/`.
 2. Add a row to the **Playbooks** table in that skill's `SKILL.md`.
 3. Lint.
-4. (Optional) register a matching AAP job template using the
-   `diag-<domain>-<purpose>` naming convention so `playbook-executor`'s Mode A
-   keyword search will pick it up.
+4. Register a matching AAP job template using the
+   `diag-<domain>-<purpose>` or `fix-<domain>-<purpose>` naming convention
+   so `playbook-executor`'s keyword search will pick it up.
 
 ## License
 

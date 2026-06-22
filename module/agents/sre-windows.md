@@ -19,7 +19,9 @@ from the agent.
 1. Identify the Windows host(s) and the symptom (service down, disk full,
    event log spike, performance).
 2. Pick the matching diagnostic playbook from `windows-diagnostics/SKILL.md`.
-3. Run via `playbook-executor` (Mode A or `adhoc-fix-job`).
+3. Run via `playbook-executor` — it will search the AAP catalog
+   (`diag-windows-*` for diagnostics, `fix-windows-*` for remediation) and
+   pick the best match. If nothing matches, stop.
 4. Parse the returned job stdout. Watch for Event Log IDs (System / Application
    / Security channels) — surface them in the report.
 5. Save `investigations/<incident-slug>/windows-diag.md`.

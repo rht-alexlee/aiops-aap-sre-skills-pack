@@ -30,7 +30,9 @@ Triage incidents across **Linux (RHEL)**, **Windows**, **Kubernetes**, and
   state-changing playbook requires an explicit "yes" / "execute" from the user.
 - **All AAP execution goes through `playbook-executor`.** Sub-agents must not
   call `job_templates_launch_retrieve` or any other AAP MCP tool directly.
-- **Generated ad-hoc playbooks run on the `adhoc-fix-job` template.** Pre-built
-  workflows match against the AAP job-template catalog by name + description.
+- **Pre-registered AAP job templates only.** `playbook-executor` matches the
+  sub-agent's intent against the names and descriptions in the AAP catalog
+  and picks the best fit. If no template matches, STOP and ask an operator
+  to register one — do not generate or run ad-hoc playbook content.
 - **Save findings to disk.** Every investigation produces a markdown report so
   the orchestrator can synthesize across domains.

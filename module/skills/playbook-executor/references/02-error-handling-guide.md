@@ -24,7 +24,7 @@ Read this reference when generating Phase 4 error reports or troubleshooting.
 **Duration**: 2m 45s
 **Started**: 2026-02-24 15:35:02 UTC
 **Failed At**: 2026-02-24 15:37:47 UTC
-**Job Template**: adhoc-fix-job
+**Job Template**: fix-linux-disk-cleanup
 **Issue**: INC-20260224-001 — High disk usage on web tier
 **AAP URL**: [View in AAP](https://aap.example.com/#/jobs/playbook/1235)
 

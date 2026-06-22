@@ -19,14 +19,16 @@ playbook through the `playbook-executor` skill.
 1. Read the incident description; identify host(s), service(s), time window.
 2. Open `linux-diagnostics/SKILL.md` and pick the diagnostic playbook(s) that
    match the symptom (health check / service / disk / performance).
-3. Invoke `playbook-executor` with:
-   - **Mode A** for pre-built templates (e.g. `diag-linux-health-check`)
-   - **Mode B** + `adhoc-fix-job` for any freshly generated remediation
+3. Invoke `playbook-executor` with the intent (action, domain, keywords,
+   target). It will search the AAP catalog (e.g. `diag-linux-health-check`,
+   `fix-linux-disk-cleanup`) and pick the best match. If nothing matches,
+   stop and tell the user — do not improvise an ad-hoc playbook.
 4. Read the AAP job stdout returned by `playbook-executor`. Apply the
    `log-analysis` skill to pull errors / patterns out.
 5. Save the report to `investigations/<incident-slug>/linux-diag.md`.
-6. If a fix is needed, propose a remediation playbook, present it to the user,
-   and only on explicit approval invoke `playbook-executor` again.
+6. If a fix is needed, ask `playbook-executor` to match a remediation template
+   (`fix-linux-*`) from the AAP catalog, present it to the user, and only on
+   explicit approval invoke `playbook-executor` again to launch it.
 
 ## Hard rules
 

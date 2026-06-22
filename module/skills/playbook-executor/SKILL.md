@@ -1,5 +1,5 @@
 ---
-description: Execute Ansible playbooks via AAP. The ONLY path AIOps SRE sub-agents use to run AAP job templates — never call AAP MCP tools directly. Selects the best-matching pre-built template or runs newly generated playbooks via `adhoc-fix-job`.
+description: Execute Ansible playbooks via AAP. The ONLY path AIOps SRE sub-agents use to run AAP job templates — never call AAP MCP tools directly. Selects the best-matching pre-built job template from the AAP catalog based on the calling sub-agent's intent.
 ---
 
 # AAP Playbook Executor
@@ -9,14 +9,11 @@ SRE skill pack. Sub-agents (`sre-linux`, `sre-windows`, `sre-kubernetes`,
 `sre-networking`) MUST invoke this skill — they MUST NOT call
 `job_templates_launch_retrieve` or any other `aap-mcp-*` tool directly.
 
-## Two selection modes
-
-- **Mode A — Match Existing Template**: when the sub-agent's intent maps to a
-  pre-built template (e.g. `diag-linux-health-check`, `fix-rhel-disk-cleanup`),
-  search the AAP catalog by keyword and pick the best match.
-- **Mode B — Ad-hoc Generated Playbook**: when the sub-agent generated a
-  fresh remediation playbook for this incident, always launch via the
-  reserved `adhoc-fix-job` template.
+This skill only runs **pre-existing AAP job templates**. It matches the
+sub-agent's intent against the names and descriptions in the AAP catalog
+and picks the best fit. It does not generate playbooks, and it does not
+run ad-hoc playbook content — every execution is a known, version-controlled
+job template that an operator registered in AAP up front.
 
 ## Prerequisites
 
@@ -47,12 +44,12 @@ intent:
     limit: web-01,web-02
   extra_vars:                 # optional, merged into job launch
     incident_slug: web-disk-full-2026-06-22
-  generated_playbook_path: null   # set to a path for Mode B; null for Mode A
 ```
 
 This skill:
-1. **Selects** the template (Mode A keyword search, or Mode B = `adhoc-fix-job`).
-2. **Validates** the template (Step 1.4 below).
+1. **Searches** the AAP catalog by keyword and **selects** the best-matching
+   pre-built job template.
+2. **Validates** the template (Step 1.3 below).
 3. **Confirms** with the user before launch (mandatory).
 4. **Launches** the job, **polls** until terminal, **collects** stdout +
    host summaries + events.
@@ -62,34 +59,37 @@ This skill:
 
 ### Phase 1: Job Template Selection
 
-#### Step 1.1: Decide Selection Mode
-
-Use Mode B if `intent.generated_playbook_path` is set. Otherwise Mode A.
-
-#### Step 1.2: List and Search Templates (Mode A)
+#### Step 1.1: Search the Catalog
 
 **MCP Tool**: `job_templates_list` (from `aap-mcp-job-management`)
 
 **Parameters**:
 - `page_size`: 50
 - `search`: a single string formed by joining `intent.symptom_keywords`
-  (and `intent.domain` as a prefix, e.g. `"linux disk"`).
+  with `intent.domain` as a prefix (e.g. `"linux disk"`,
+  `"kubernetes pod crashloop"`).
 
-For each candidate template in the result:
+#### Step 1.2: Score Candidates
+
+For each candidate template returned by the search:
+
 1. Call `job_templates_retrieve(id)` to get full details.
-2. Score by name + description match against the intent.
-3. Run the inline validation (Step 1.4).
-4. Present the top 3 to the user.
+2. Score by Name + Description match against `intent.symptom_keywords`
+   and `intent.action`. Prefer templates whose name or description
+   explicitly mentions the action (e.g. `diag-…` for diagnose,
+   `fix-…` for remediate).
+3. Run the inline validation (Step 1.3) on the top-scored candidates.
+4. Present the top 3 candidates to the user with a brief justification.
 
-#### Step 1.3: Select `adhoc-fix-job` (Mode B)
+If the search returns **no candidates** that pass validation:
 
-**MCP Tool**: `job_templates_list` with `search: "adhoc-fix-job"`.
-Retrieve by id, validate, then proceed.
+- STOP. Tell the user no suitable template is registered in AAP for this
+  intent. Recommend that an operator register a template using the
+  naming convention `diag-<domain>-<purpose>` or `fix-<domain>-<purpose>`
+  (see `module/memory/conventions.md`).
+- Do NOT attempt to run a playbook outside the AAP catalog.
 
-The `adhoc-fix-job` template MUST be configured with
-`ask_variables_on_launch: true` and `ask_limit_on_launch: true`.
-
-#### Step 1.4: Inline Job Template Validation
+#### Step 1.3: Inline Job Template Validation
 
 Read-only checks. Replaces any external validator.
 
@@ -124,7 +124,7 @@ Read-only checks. Replaces any external validator.
 - **FAILED** — STOP. Tell the user which check failed and how to fix the
   template in AAP Web UI.
 
-#### Step 1.5: Present Selection to User
+#### Step 1.4: Present Selection to User
 
 ```
 Selected job template:
@@ -132,7 +132,7 @@ Selected job template:
 → "{template.name}" (ID: {template.id})
    Description: {template.description}
    Playbook: {template.playbook}
-   Match reason: {keyword match | "ad-hoc remediation generated for this incident"}
+   Match reason: {keyword/description match}
 
 Validation: ✓ PASSED
 
@@ -150,7 +150,7 @@ Wait for explicit confirmation.
 
 Target hosts:       {N} systems ({limit pattern})
 Inventory:          {inventory.name}
-Playbook:           {template.playbook OR "ad-hoc generated for incident X"}
+Playbook:           {template.playbook}
 Issue:              {symptom summary}
 Job template:       {name} (ID: {id})
 
@@ -178,9 +178,6 @@ Wait for explicit "yes" or "execute".
   }
 }
 ```
-
-For Mode B, also pass the generated playbook reference per the
-`adhoc-fix-job` template definition.
 
 #### Step 2.3: Monitor
 
@@ -259,8 +256,9 @@ The sub-agent uses this structure to write its `<domain>-diag.md` /
 ## Best practices
 
 1. **Best-match search** on template Name + Description.
-2. **`adhoc-fix-job` for generated playbooks** — always.
-3. **Validate before launch** (Step 1.4).
+2. **Pre-registered templates only** — if no template matches, STOP and ask
+   an operator to register one. Do not run ad-hoc playbook content.
+3. **Validate before launch** (Step 1.3).
 4. **Check project sync** — stale playbooks cause stale fixes.
 5. **Stream events** during execution.
 6. **Full reporting** — per-host stats + task timeline + stdout.

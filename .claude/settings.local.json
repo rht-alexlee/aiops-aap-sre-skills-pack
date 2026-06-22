@@ -27,7 +27,11 @@
       "Bash(gh api *)",
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(git -c user.email=alexlee@redhat.com -c user.name=rht-alexlee commit -q -m 'Initial AIOps SRE skill pack \\(Lola module\\) *)"
+      "Bash(git -c user.email=alexlee@redhat.com -c user.name=rht-alexlee commit -q -m 'Initial AIOps SRE skill pack \\(Lola module\\) *)",
+      "Bash(gh repo *)",
+      "Bash(git -c user.email=alexlee@redhat.com -c user.name=rht-alexlee add -A)",
+      "Bash(git -c user.email=alexlee@redhat.com -c user.name=rht-alexlee commit -m 'playbook-executor: remove ad-hoc Mode B path, Mode A only *)",
+      "Bash(git push *)"
     ]
   }
 }

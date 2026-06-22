@@ -2,18 +2,18 @@
 
 Read this reference when demonstrating end-to-end workflow patterns.
 
-## Example 1: Match Existing Template (Mode A)
+## Example 1: Match Existing Template
 
 **User Request**: "We have an alert for high disk usage on the web tier — run the existing disk cleanup playbook."
 
 **Skill Response**:
 
-1. **List Job Templates** (Mode A):
-   - Call `job_templates_list(search="disk")` → 3 candidates returned.
+1. **List Job Templates**:
+   - Call `job_templates_list(search="linux disk")` → 3 candidates returned.
    - Call `job_templates_retrieve(id)` for each.
    - Best match by Name/Description: **"Disk Cleanup — Web Tier"** (ID: 22).
 
-2. **Inline Template Validation (Step 1.4)**:
+2. **Inline Template Validation (Step 1.3)**:
    - Required checks: Inventory ✓, Project ✓, Playbook ✓, Credentials ✓, become_enabled ✓
    - Recommended: ask_variables_on_launch ✓, ask_limit_on_launch ✓
    - Project status: `successful` ✓
@@ -30,7 +30,7 @@ Read this reference when demonstrating end-to-end workflow patterns.
 4. **Final Confirmation** → user replies `execute`.
 
 5. **Launch Job**:
-   - `job_templates_launch_retrieve(id=22, requestBody={job_type: "run", limit: "prod-web-01,prod-web-02,prod-web-03", extra_vars: {issue_id: "INC-20260224-001"}})`
+   - `job_templates_launch_retrieve(id=22, requestBody={job_type: "run", limit: "prod-web-01,prod-web-02,prod-web-03", extra_vars: {incident_slug: "web-disk-full-2026-02-24"}})`
    - Job ID 1234 created.
 
 6. **Monitor** → COMPLETED, status `successful`.
@@ -49,50 +49,32 @@ Read this reference when demonstrating end-to-end workflow patterns.
    Recommend: Run remediation-verifier to confirm disk usage is back to normal.
    ```
 
-## Example 2: Ad-hoc Generated Playbook (Mode B with `adhoc-fix-job`)
+## Example 2: No Matching Template — Stop and Refer to Operator
 
-**User Request**: "We have an unusual incident — generate a fix playbook and run it."
+**User Request**: "We have an unusual incident — run a fix."
 
 **Skill Response**:
 
-1. **Agent context**: A new playbook was just produced by `playbook-generator` (e.g. `playbooks/remediation/fix-INC-20260224-002.yml`).
+1. **Search** the catalog with the available keywords:
+   `job_templates_list(search="kubernetes ingress cert renewal")` → 0 candidates.
 
-2. **Select `adhoc-fix-job`** (Mode B):
-   - Call `job_templates_list(search="adhoc-fix-job")` → ID 7.
-   - Call `job_templates_retrieve(id="7")`.
+2. **Stop and report**:
+   ```
+   ✗ No pre-registered AAP job template matches this intent.
 
-3. **Inline Template Validation (Step 1.4)**:
-   - Required ✓, Recommended ✓ (especially `ask_variables_on_launch: true` so we can pass the playbook reference at launch).
-   - Result: **✓ PASSED**.
+   Searched: "kubernetes ingress cert renewal"
+   Candidates: 0
 
-4. **Final Confirmation** → user replies `execute`.
+   This executor only runs templates that already exist in the AAP catalog.
 
-5. **Launch Job**:
-   ```json
-   {
-     "id": "7",
-     "requestBody": {
-       "job_type": "run",
-       "extra_vars": {
-         "issue_id": "INC-20260224-002",
-         "remediation_mode": "automated",
-         "playbook_ref": "playbooks/remediation/fix-INC-20260224-002.yml"
-       },
-       "limit": "prod-app-01,prod-app-02"
-     }
-   }
+   Next steps:
+   - Ask an operator to register a template using the convention
+     fix-<domain>-<purpose>  (e.g. fix-k8s-ingress-cert-renewal).
+   - Re-run /diagnose once the template is registered.
    ```
 
-6. **Monitor** → COMPLETED.
-
-7. **Generate Report**: Success template with full per-host details.
-
-8. **Step 3.3 Validation**: ✓ Job log references `INC-20260224-002` and shows the expected remediation tasks.
-
-9. **Suggest Verification**:
-   ```
-   Recommend: Run remediation-verifier to confirm the underlying symptom is resolved.
-   ```
+3. **Do NOT launch any playbook.** Wait for the operator to add the template
+   to AAP, then retry.
 
 ## Example 3: Handle Execution Failure (Partial Success)
 
@@ -100,7 +82,7 @@ Read this reference when demonstrating end-to-end workflow patterns.
 
 **Skill Response**:
 
-1–4. [Same as Example 1 or 2 through launch.]
+1–4. [Same as Example 1 through launch.]
 
 5. **Execute Playbook**:
    - Launch job → FAILED on 1 of 3 hosts.
@@ -134,7 +116,7 @@ Read this reference when demonstrating end-to-end workflow patterns.
 
 1. **Retrieve Template**: `job_templates_retrieve(id="15")`.
 
-2. **Inline Template Validation (Step 1.4)**:
+2. **Inline Template Validation (Step 1.3)**:
    - `become_enabled` is `false` → **✗ FAILED** (required).
 
 3. **Stop and Report**:
@@ -157,7 +139,7 @@ Read this reference when demonstrating end-to-end workflow patterns.
 
 **Skill Response**:
 
-1. **Search**: `job_templates_list(search="memory")` → 3 candidates.
+1. **Search**: `job_templates_list(search="linux memory")` → 3 candidates.
 
 2. **Validate each** with the inline checks. 2 PASS, 1 FAILS (no credentials).
 
@@ -173,9 +155,7 @@ Read this reference when demonstrating end-to-end workflow patterns.
       Description: Recycles worker processes safely.
       Validation: ✓ PASSED WITH WARNINGS (ask_limit_on_launch: false)
 
-   Select template (1 or 2), or "adhoc" to generate a new fix playbook.
+   Select template (1 or 2), or "abort".
    ```
 
 4. User selects `2` → continue with Final Confirmation → Launch → Monitor → Report.
-```
-
