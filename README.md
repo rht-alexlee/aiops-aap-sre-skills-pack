@@ -84,6 +84,34 @@ ansible-lint module/skills/*/playbooks/*.yml
 ansible-galaxy collection install ansible.windows kubernetes.core
 ```
 
+## Uploading the playbooks to AAP
+
+The agents only execute playbooks that are registered as **job templates**
+in AAP. AAP itself pulls the playbook files from this Git repo via a Project;
+you just need to register the project and create one template per playbook.
+
+A one-shot bootstrap playbook + a manual walkthrough live in
+[`docs/upload-playbooks-to-aap.md`](docs/upload-playbooks-to-aap.md).
+Short version:
+
+```bash
+ansible-galaxy collection install awx.awx
+export CONTROLLER_HOST=https://aap.example.com
+export CONTROLLER_USERNAME=admin
+export CONTROLLER_PASSWORD='...'
+
+ansible-playbook aap-bootstrap/register_in_aap.yml \
+  -e organization=Default \
+  -e project_scm_url=https://github.com/rht-alexlee/aiops-aap-sre-skills-pack.git \
+  -e project_scm_branch=main \
+  -e ssh_credential_name=linux-ssh \
+  -e winrm_credential_name=windows-winrm
+```
+
+That creates the `aiops-sre-skills` project, the three inventories, and 21
+job templates named `diag-<domain>-<purpose>` — exactly what
+`playbook-executor` searches for.
+
 ## Required MCP servers
 
 Configured in `module/mcps.json`:

@@ -1,0 +1,182 @@
+---
+# Job-template definitions that mirror the diagnostic playbooks shipped in
+# module/skills/*/playbooks/. Source this list from register_in_aap.yml.
+#
+# Each entry assumes the project (built from this Git repo) has already been
+# created and synced. The "playbook" path is relative to the project root.
+
+job_templates:
+
+  # ---- Linux ---------------------------------------------------------------
+  - name: diag-linux-health-check
+    description: "RHEL host triage — uptime, memory, disk, failed units, OOMs."
+    playbook: module/skills/linux-diagnostics/playbooks/rhel_health_check.yml
+    inventory: linux-prod
+    become: true
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-linux-service
+    description: "Diagnose a failing systemd unit — status, journal, restarts, sockets. Requires service_name."
+    playbook: module/skills/linux-diagnostics/playbooks/rhel_service_diagnose.yml
+    inventory: linux-prod
+    become: true
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-linux-disk
+    description: "Disk pressure diagnosis — filesystems, inodes, top files, deleted-but-open handles."
+    playbook: module/skills/linux-diagnostics/playbooks/rhel_disk_diagnose.yml
+    inventory: linux-prod
+    become: true
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-linux-perf
+    description: "Performance snapshot — vmstat, iostat, top processes, run queue, sockets."
+    playbook: module/skills/linux-diagnostics/playbooks/rhel_perf_snapshot.yml
+    inventory: linux-prod
+    become: true
+    ask_limit: true
+    ask_variables: true
+
+  # ---- Windows -------------------------------------------------------------
+  - name: diag-windows-health-check
+    description: "Windows host triage — uptime, stopped services, drive free, recent System log errors, CPU/memory."
+    playbook: module/skills/windows-diagnostics/playbooks/windows_health_check.yml
+    inventory: windows-prod
+    become: false
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-windows-service
+    description: "Diagnose a Windows service — service info, process, SCM events, Application log. Requires service_name."
+    playbook: module/skills/windows-diagnostics/playbooks/windows_service_diagnose.yml
+    inventory: windows-prod
+    become: false
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-windows-eventlog
+    description: "Collect Windows Event Log for a window — top IDs and full event JSON. Tune via log_name, levels, since_hours."
+    playbook: module/skills/windows-diagnostics/playbooks/windows_eventlog_collect.yml
+    inventory: windows-prod
+    become: false
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-windows-disk
+    description: "Windows drive pressure — logical-disk summary, largest files, WinSxS analysis. Requires drive_letter."
+    playbook: module/skills/windows-diagnostics/playbooks/windows_disk_diagnose.yml
+    inventory: windows-prod
+    become: false
+    ask_limit: true
+    ask_variables: true
+
+  # ---- Kubernetes ----------------------------------------------------------
+  - name: diag-k8s-cluster-health
+    description: "Cluster-wide snapshot — nodes, warning events, component statuses, namespace phases. Targets the k8s bastion."
+    playbook: module/skills/kubernetes-troubleshooting/playbooks/k8s_cluster_health.yml
+    inventory: k8s-bastion
+    become: false
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-k8s-pod
+    description: "Pod diagnosis — phases, warning events, current + previous container logs. Requires target_namespace; pod_name and label_selector optional."
+    playbook: module/skills/kubernetes-troubleshooting/playbooks/k8s_pod_diagnose.yml
+    inventory: k8s-bastion
+    become: false
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-k8s-node
+    description: "Node pressure diagnosis — conditions, capacity/allocatable, warning events, pods per node. node_name optional."
+    playbook: module/skills/kubernetes-troubleshooting/playbooks/k8s_node_pressure.yml
+    inventory: k8s-bastion
+    become: false
+    ask_limit: true
+    ask_variables: true
+
+  # ---- Networking — DNS ---------------------------------------------------
+  - name: diag-net-dns-resolution
+    description: "Resolve target FQDNs via default and explicit resolvers; reverse-lookup results. Requires target_names."
+    playbook: module/skills/networking-dns/playbooks/dns_resolution_check.yml
+    inventory: linux-prod
+    become: false
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-net-dns-config
+    description: "Audit resolver config — resolv.conf, nsswitch, resolvectl, NetworkManager DNS."
+    playbook: module/skills/networking-dns/playbooks/dns_resolver_config.yml
+    inventory: linux-prod
+    become: false
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-net-dns-zone
+    description: "Query zone data — SOA, NS, DNSSEC, per-NS serial drift. Requires zone; nameserver optional."
+    playbook: module/skills/networking-dns/playbooks/dns_zone_query.yml
+    inventory: linux-prod
+    become: false
+    ask_limit: true
+    ask_variables: true
+
+  # ---- Networking — L2 ----------------------------------------------------
+  - name: diag-net-l2-link
+    description: "L2 link state — ethtool per interface, counters, carrier transitions. interfaces optional (default: all)."
+    playbook: module/skills/networking-layer2/playbooks/l2_link_check.yml
+    inventory: linux-prod
+    become: true
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-net-l2-arp
+    description: "ARP / NDP audit — full neighbour table, unhealthy entries, duplicate MACs. target_ip optional (probes with arping)."
+    playbook: module/skills/networking-layer2/playbooks/l2_arp_audit.yml
+    inventory: linux-prod
+    become: false
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-net-l2-bridge
+    description: "Bridge + VLAN audit — VLAN links, bridge VLAN db, FDB sample, bridge link/STP."
+    playbook: module/skills/networking-layer2/playbooks/l2_bridge_vlan.yml
+    inventory: linux-prod
+    become: true
+    ask_limit: true
+    ask_variables: true
+
+  # ---- Networking — L3 ----------------------------------------------------
+  - name: diag-net-l3-reachability
+    description: "L3 reachability — IP addrs, routing table, route get, ping, traceroute. Requires targets (list)."
+    playbook: module/skills/networking-layer3/playbooks/l3_reachability.yml
+    inventory: linux-prod
+    become: false
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-net-l3-firewall
+    description: "Host firewall audit — detect backend, dump nftables / iptables / firewalld, recent kernel drops."
+    playbook: module/skills/networking-layer3/playbooks/l3_firewall_audit.yml
+    inventory: linux-prod
+    become: true
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-net-l3-mtu
+    description: "Path MTU probe — tracepath plus DF ping at decreasing sizes. Requires target."
+    playbook: module/skills/networking-layer3/playbooks/l3_mtu_probe.yml
+    inventory: linux-prod
+    become: false
+    ask_limit: true
+    ask_variables: true
+
+  - name: diag-net-l3-protocols
+    description: "Routing protocol state (FRR / Quagga) — OSPF and BGP neighbours + routes, FRR daemon status."
+    playbook: module/skills/networking-layer3/playbooks/l3_routing_protocols.yml
+    inventory: linux-prod
+    become: true
+    ask_limit: true
+    ask_variables: true

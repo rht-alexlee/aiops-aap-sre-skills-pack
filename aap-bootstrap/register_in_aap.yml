@@ -1,0 +1,114 @@
+---
+# One-shot bootstrap: register the SRE skill pack's diagnostic playbooks as
+# AAP job templates so the playbook-executor skill can find them by keyword.
+#
+# This playbook does NOT push playbooks to AAP — AAP pulls them from this Git
+# repo via a Project. You run this against your AAP controller (over the API)
+# from any machine that has the awx.awx collection installed.
+#
+# Prereqs
+#   ansible-galaxy collection install awx.awx
+#   export CONTROLLER_HOST=https://aap.example.com
+#   export CONTROLLER_USERNAME=admin
+#   export CONTROLLER_PASSWORD=...
+#   (or use CONTROLLER_OAUTH_TOKEN instead of username/password)
+#
+# Run
+#   ansible-playbook aap-bootstrap/register_in_aap.yml \
+#     -e organization=Default \
+#     -e project_scm_url=https://github.com/rht-alexlee/aiops-aap-sre-skills-pack.git \
+#     -e project_scm_branch=main \
+#     -e ssh_credential_name=linux-ssh \
+#     -e winrm_credential_name=windows-winrm
+#
+# What it creates
+#   * Project           "aiops-sre-skills" pointing at this Git repo
+#   * Inventories       linux-prod, windows-prod, k8s-bastion  (if missing)
+#   * Job templates     diag-<domain>-<purpose>  (one per playbook)
+
+- name: Register AIOps SRE skill pack in AAP
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  vars:
+    organization: "Default"
+    project_name: "aiops-sre-skills"
+    project_scm_url: "https://github.com/rht-alexlee/aiops-aap-sre-skills-pack.git"
+    project_scm_branch: "main"
+    execution_environment: "Default execution environment"
+    ssh_credential_name: "linux-ssh"
+    winrm_credential_name: "windows-winrm"
+    k8s_credential_name: "linux-ssh"     # bastion uses ssh; override if different
+    inventories_to_create:
+      - linux-prod
+      - windows-prod
+      - k8s-bastion
+    job_template_defaults:
+      job_type: run
+      verbosity: 1
+      concurrent_jobs_enabled: false
+
+  pre_tasks:
+    - name: Load job template definitions
+      ansible.builtin.include_vars:
+        file: job_templates.yml
+        name: jt_data
+
+  tasks:
+
+    - name: Ensure inventories exist
+      awx.awx.inventory:
+        name: "{{ item }}"
+        organization: "{{ organization }}"
+        state: present
+      loop: "{{ inventories_to_create }}"
+
+    - name: Ensure project exists and is synced from Git
+      awx.awx.project:
+        name: "{{ project_name }}"
+        organization: "{{ organization }}"
+        scm_type: git
+        scm_url: "{{ project_scm_url }}"
+        scm_branch: "{{ project_scm_branch }}"
+        scm_update_on_launch: true
+        scm_clean: true
+        wait: true
+        state: present
+
+    - name: Pick credential for each inventory
+      ansible.builtin.set_fact:
+        inventory_credential:
+          linux-prod: "{{ ssh_credential_name }}"
+          windows-prod: "{{ winrm_credential_name }}"
+          k8s-bastion: "{{ k8s_credential_name }}"
+
+    - name: Ensure job templates exist
+      awx.awx.job_template:
+        name: "{{ item.name }}"
+        description: "{{ item.description }}"
+        organization: "{{ organization }}"
+        project: "{{ project_name }}"
+        playbook: "{{ item.playbook }}"
+        inventory: "{{ item.inventory }}"
+        execution_environment: "{{ execution_environment }}"
+        credentials:
+          - "{{ inventory_credential[item.inventory] }}"
+        become_enabled: "{{ item.become | default(true) }}"
+        ask_limit_on_launch: "{{ item.ask_limit | default(true) }}"
+        ask_variables_on_launch: "{{ item.ask_variables | default(true) }}"
+        ask_inventory_on_launch: false
+        job_type: "{{ job_template_defaults.job_type }}"
+        verbosity: "{{ job_template_defaults.verbosity }}"
+        concurrent_jobs_enabled: "{{ job_template_defaults.concurrent_jobs_enabled }}"
+        state: present
+      loop: "{{ jt_data.job_templates }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Summarise what was registered
+      ansible.builtin.debug:
+        msg: >-
+          Registered {{ jt_data.job_templates | length }} job templates from
+          project '{{ project_name }}' (branch {{ project_scm_branch }}).
+          The playbook-executor skill will now find them by keyword.

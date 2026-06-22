@@ -31,7 +31,10 @@
       "Bash(gh repo *)",
       "Bash(git -c user.email=alexlee@redhat.com -c user.name=rht-alexlee add -A)",
       "Bash(git -c user.email=alexlee@redhat.com -c user.name=rht-alexlee commit -m 'playbook-executor: remove ad-hoc Mode B path, Mode A only *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(ansible-lint aap-bootstrap/register_in_aap.yml)",
+      "Bash(ansible-lint aap-bootstrap/register_in_aap.yml module/skills/*/playbooks/*.yml)",
+      "Bash(git -c user.email=alexlee@redhat.com -c user.name=rht-alexlee commit -m 'docs: how to upload SRE playbooks to AAP *)"
     ]
   }
 }
