@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "aap-mcp-job-management": {
+      "type": "http",
+      "url": "${AAP_MCP_SERVER}/job-management/mcp",
+      "headers": {
+        "Authorization": "Bearer ${AAP_API_TOKEN}"
+      }
+    },
+    "aap-mcp-inventory-management": {
+      "type": "http",
+      "url": "${AAP_MCP_SERVER}/inventory-management/mcp",
+      "headers": {
+        "Authorization": "Bearer ${AAP_API_TOKEN}"
+      }
+    }
+  }
+}

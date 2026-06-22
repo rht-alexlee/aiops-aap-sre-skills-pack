@@ -1,0 +1,47 @@
+---
+- name: Collect Windows Event Log for a window (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    log_name: "{{ log_name | default('System') }}"
+    levels: "{{ levels | default('1,2,3') }}"   # 1=Critical, 2=Error, 3=Warning
+    since_hours: "{{ since_hours | default(1) }}"
+    max_events: "{{ max_events | default(100) }}"
+  tasks:
+
+    - name: Pull events
+      ansible.windows.win_shell: |
+        $since = (Get-Date).AddHours(-{{ since_hours }})
+        $lvls = @({{ levels }})
+        Get-WinEvent -FilterHashtable @{LogName='{{ log_name }}'; Level=$lvls; StartTime=$since} `
+          -MaxEvents {{ max_events }} |
+          Select-Object TimeCreated, Id, ProviderName, LevelDisplayName, Message |
+          ConvertTo-Json -Depth 3
+      register: events_json
+      changed_when: false
+      failed_when: false
+
+    - name: Top event IDs by frequency
+      ansible.windows.win_shell: |
+        $since = (Get-Date).AddHours(-{{ since_hours }})
+        $lvls = @({{ levels }})
+        Get-WinEvent -FilterHashtable @{LogName='{{ log_name }}'; Level=$lvls; StartTime=$since} |
+          Group-Object Id |
+          Sort-Object Count -Descending |
+          Select-Object -First 15 Count, Name |
+          Format-Table -AutoSize | Out-String
+      register: top_ids
+      changed_when: false
+      failed_when: false
+
+    - name: Emit structured event-log report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          log_name: "{{ log_name }}"
+          since_hours: "{{ since_hours }}"
+          top_event_ids: "{{ top_ids.stdout_lines | default([]) }}"
+          events_json: "{{ events_json.stdout | default('') }}"

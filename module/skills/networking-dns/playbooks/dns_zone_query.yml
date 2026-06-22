@@ -1,0 +1,51 @@
+---
+- name: Query zone data (SOA, NS, DNSSEC) for a domain (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    zone: "{{ zone | mandatory }}"
+    nameserver: "{{ nameserver | default('') }}"     # optional override
+  tasks:
+
+    - name: SOA record
+      ansible.builtin.command: "dig {{ ('@' + nameserver) if nameserver else '' }} {{ zone }} SOA +noall +answer +authority"
+      register: soa
+      changed_when: false
+      failed_when: false
+
+    - name: NS records
+      ansible.builtin.command: "dig {{ ('@' + nameserver) if nameserver else '' }} {{ zone }} NS +short"
+      register: ns_recs
+      changed_when: false
+      failed_when: false
+
+    - name: DNSSEC validation chain
+      ansible.builtin.command: "dig {{ ('@' + nameserver) if nameserver else '' }} {{ zone }} +dnssec +cd"
+      register: dnssec
+      changed_when: false
+      failed_when: false
+
+    - name: Per-nameserver SOA serial drift check
+      ansible.builtin.shell: |
+        set -o pipefail
+        for ns in {{ ns_recs.stdout_lines | join(' ') }}; do
+          serial=$(dig @"$ns" {{ zone }} SOA +short | awk '{print $3}')
+          echo "$ns -> serial=$serial"
+        done
+      register: serial_drift
+      changed_when: false
+      failed_when: false
+      when: ns_recs.stdout_lines | length > 0
+
+    - name: Emit zone-query report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          zone: "{{ zone }}"
+          soa: "{{ soa.stdout_lines | default([]) }}"
+          ns: "{{ ns_recs.stdout_lines | default([]) }}"
+          dnssec: "{{ dnssec.stdout_lines | default([]) }}"
+          serial_drift: "{{ serial_drift.stdout_lines | default([]) }}"

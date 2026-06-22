@@ -1,0 +1,44 @@
+---
+- name: Bridge and VLAN configuration audit (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+  tasks:
+
+    - name: VLAN interfaces (link layer)
+      ansible.builtin.shell: |
+        set -o pipefail
+        ip -d link show | awk '/vlan id/ {print prev; print $0} {prev=$0}'
+      register: vlan_links
+      changed_when: false
+      failed_when: false
+
+    - name: Bridge VLAN database
+      ansible.builtin.command: bridge vlan show
+      register: bridge_vlan
+      changed_when: false
+      failed_when: false
+
+    - name: Bridge FDB (MAC table)
+      ansible.builtin.command: bridge fdb show
+      register: bridge_fdb
+      changed_when: false
+      failed_when: false
+
+    - name: Bridge link states (STP)
+      ansible.builtin.command: bridge link show
+      register: bridge_link
+      changed_when: false
+      failed_when: false
+
+    - name: Emit bridge/VLAN report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          vlan_links: "{{ vlan_links.stdout_lines | default([]) }}"
+          bridge_vlan: "{{ bridge_vlan.stdout_lines | default([]) }}"
+          bridge_fdb_sample: "{{ bridge_fdb.stdout_lines[:50] | default([]) }}"
+          bridge_link: "{{ bridge_link.stdout_lines | default([]) }}"

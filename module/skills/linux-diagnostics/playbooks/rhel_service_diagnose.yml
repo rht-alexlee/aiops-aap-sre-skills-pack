@@ -1,0 +1,47 @@
+---
+- name: Diagnose a failing systemd unit (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    service_name: "{{ service_name | mandatory }}"
+    log_window: "{{ log_window | default('1 hour ago') }}"
+  tasks:
+
+    - name: Show systemd unit status
+      ansible.builtin.command: "systemctl status {{ service_name }} --no-pager"
+      register: svc_status
+      changed_when: false
+      failed_when: false
+
+    - name: Pull journal for the service
+      ansible.builtin.command: "journalctl -u {{ service_name }} --since '{{ log_window }}' --no-pager"
+      register: svc_journal
+      changed_when: false
+      failed_when: false
+
+    - name: List recent unit restarts
+      ansible.builtin.shell: |
+        set -o pipefail
+        systemctl show {{ service_name }} -p NRestarts -p ActiveEnterTimestamp -p InvocationID
+      register: svc_restarts
+      changed_when: false
+      failed_when: false
+
+    - name: Capture listening sockets (if relevant)
+      ansible.builtin.command: ss -ltnp
+      register: ss_out
+      changed_when: false
+      failed_when: false
+
+    - name: Emit structured service report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          service: "{{ service_name }}"
+          status: "{{ svc_status.stdout_lines | default([]) }}"
+          journal_excerpt: "{{ svc_journal.stdout_lines[-200:] | default([]) }}"
+          restart_info: "{{ svc_restarts.stdout_lines | default([]) }}"
+          listening_sockets: "{{ ss_out.stdout_lines | default([]) }}"

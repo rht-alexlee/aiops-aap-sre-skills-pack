@@ -1,0 +1,50 @@
+---
+- name: DNS resolver configuration audit (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+  tasks:
+
+    - name: Read /etc/resolv.conf
+      ansible.builtin.slurp:
+        src: /etc/resolv.conf
+      register: resolv
+      failed_when: false
+
+    - name: Read /etc/nsswitch.conf
+      ansible.builtin.slurp:
+        src: /etc/nsswitch.conf
+      register: nsswitch
+      failed_when: false
+
+    - name: Systemd-resolved status (if present)
+      ansible.builtin.command: resolvectl status
+      register: resolvectl
+      changed_when: false
+      failed_when: false
+
+    - name: NetworkManager DNS plugin
+      ansible.builtin.shell: |
+        set -o pipefail
+        nmcli -g general.dns-mode con show 2>/dev/null || true
+        nmcli dev show 2>/dev/null | grep -E 'IP4.DNS|IP6.DNS' || true
+      register: nm_dns
+      changed_when: false
+      failed_when: false
+
+    - name: Emit resolver config report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          resolv_conf: "{{ (resolv.content | default('') | b64decode).splitlines() }}"
+          nsswitch_dns_line: >-
+            {{
+              (nsswitch.content | default('') | b64decode).splitlines()
+              | select('match', '^hosts:')
+              | list
+            }}
+          resolvectl: "{{ resolvectl.stdout_lines | default([]) }}"
+          networkmanager_dns: "{{ nm_dns.stdout_lines | default([]) }}"

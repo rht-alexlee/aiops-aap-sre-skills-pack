@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:developers.redhat.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl -sSfL https://raw.githubusercontent.com/tonykay/aiops-deep-agents/main/skills/linux/diagnostics/SKILL.md -o /tmp/skill-linux.md)",
+      "Bash(curl -sSfL https://raw.githubusercontent.com/tonykay/aiops-deep-agents/main/skills/kubernetes/troubleshooting/SKILL.md -o /tmp/skill-k8s.md)",
+      "Bash(curl -sSfL https://raw.githubusercontent.com/tonykay/aiops-deep-agents/main/skills/common/log-analysis/SKILL.md -o /tmp/skill-loganalysis.md)",
+      "Bash(curl -sSfL https://api.github.com/repos/tonykay/aiops-deep-agents/contents/skills/networking -o /tmp/net-tree.json)",
+      "Bash(curl -sSfL https://api.github.com/repos/tonykay/aiops-deep-agents/contents/skills -o /tmp/skills-tree.json)",
+      "Read(//tmp/**)",
+      "Bash(curl -sSL \"https://developers.redhat.com/articles/2026/04/08/manage-ai-context-lola-package-manager\" -o /tmp/lola.html -w \"HTTP:%{http_code}\\\\n\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python3)",
+      "Bash(curl -sSfL \"https://raw.githubusercontent.com/dmartinol/lola-demo/main/demo.yaml\" -o /tmp/lola-demo.yaml)",
+      "Bash(curl -sSfL \"https://api.github.com/repos/RedHatProductSecurity/lola/contents/\")",
+      "Bash(curl -sSfL \"https://api.github.com/repos/RedHatProductSecurity/lola/contents/docs\")",
+      "Bash(curl -sSfL \"https://api.github.com/repos/RedHatProductSecurity/lola/contents/examples\")",
+      "Bash(curl -sSfL \"https://api.github.com/repos/RedHatProductSecurity/lola/contents/examples/git-module\")",
+      "Bash(curl -sSfL \"https://api.github.com/repos/RedHatProductSecurity/lola/contents/docs/concepts\")",
+      "Bash(curl -sSfL \"https://api.github.com/repos/RedHatProductSecurity/lola/contents/examples/git-module/module?recursive=1\")",
+      "Bash(curl -sSfL \"https://api.github.com/repos/RedHatProductSecurity/lola/git/trees/main?recursive=1\")",
+      "Bash(curl -sSfL \"https://raw.githubusercontent.com/RedHatProductSecurity/lola/main/docs/concepts/skills-and-modules.md\")",
+      "Bash(ansible-lint --version)",
+      "Bash(ansible-galaxy collection *)",
+      "Bash(gh auth *)",
+      "Bash(gh api *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git -c user.email=alexlee@redhat.com -c user.name=rht-alexlee commit -q -m 'Initial AIOps SRE skill pack \\(Lola module\\) *)"
+    ]
+  }
+}

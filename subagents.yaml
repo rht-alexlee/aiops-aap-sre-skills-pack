@@ -1,0 +1,51 @@
+# Sub-agent definitions for the LangChain Deep Agents wiring.
+# Each entry mirrors a markdown persona in module/agents/<name>.md and binds
+# the same skills bundle. The Deep Agents loader reads this file to build the
+# `create_deep_agent` tree.
+
+subagents:
+  - name: sre_linux
+    persona: module/agents/sre-linux.md
+    model: anthropic:claude-opus-4
+    skills:
+      - module/skills/linux-diagnostics
+      - module/skills/log-analysis
+      - module/skills/playbook-executor
+    tools:
+      - aap_mcp_job_management
+      - aap_mcp_inventory_management
+
+  - name: sre_windows
+    persona: module/agents/sre-windows.md
+    model: anthropic:claude-opus-4
+    skills:
+      - module/skills/windows-diagnostics
+      - module/skills/log-analysis
+      - module/skills/playbook-executor
+    tools:
+      - aap_mcp_job_management
+      - aap_mcp_inventory_management
+
+  - name: sre_kubernetes
+    persona: module/agents/sre-kubernetes.md
+    model: anthropic:claude-opus-4
+    skills:
+      - module/skills/kubernetes-troubleshooting
+      - module/skills/log-analysis
+      - module/skills/playbook-executor
+    tools:
+      - aap_mcp_job_management
+      - aap_mcp_inventory_management
+
+  - name: sre_networking
+    persona: module/agents/sre-networking.md
+    model: anthropic:claude-opus-4
+    skills:
+      - module/skills/networking-dns
+      - module/skills/networking-layer2
+      - module/skills/networking-layer3
+      - module/skills/log-analysis
+      - module/skills/playbook-executor
+    tools:
+      - aap_mcp_job_management
+      - aap_mcp_inventory_management

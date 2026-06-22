@@ -1,0 +1,87 @@
+---
+- name: Diagnose pod(s) in a namespace (read-only)
+  hosts: all
+  gather_facts: false
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    kubeconfig_path: "{{ kubeconfig_path | default(ansible_env.KUBECONFIG | default('/root/.kube/config')) }}"
+    target_namespace: "{{ target_namespace | mandatory }}"
+    label_selector: "{{ label_selector | default('') }}"
+    pod_name: "{{ pod_name | default('') }}"
+    log_tail: "{{ log_tail | default(200) }}"
+  tasks:
+
+    - name: Pods in namespace
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: Pod
+        namespace: "{{ target_namespace }}"
+        label_selectors: "{{ [label_selector] if label_selector else omit }}"
+      register: pods_info
+
+    - name: Filter to target pod(s)
+      ansible.builtin.set_fact:
+        target_pods: >-
+          {{
+            pods_info.resources
+            | selectattr('metadata.name', 'match', (pod_name or '.*'))
+            | list
+          }}
+
+    - name: Events in namespace (last hour)
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: Event
+        namespace: "{{ target_namespace }}"
+      register: ns_events
+
+    - name: Current container logs (tail {{ log_tail }})
+      kubernetes.core.k8s_log:
+        kubeconfig: "{{ kubeconfig_path }}"
+        namespace: "{{ target_namespace }}"
+        name: "{{ item.metadata.name }}"
+        tail_lines: "{{ log_tail }}"
+      register: logs_current
+      loop: "{{ target_pods }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+      failed_when: false
+
+    - name: Previous container logs
+      kubernetes.core.k8s_log:
+        kubeconfig: "{{ kubeconfig_path }}"
+        namespace: "{{ target_namespace }}"
+        name: "{{ item.metadata.name }}"
+        previous: true
+        tail_lines: "{{ log_tail }}"
+      register: logs_previous
+      loop: "{{ target_pods }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+      failed_when: false
+
+    - name: Emit pod diagnosis
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          namespace: "{{ target_namespace }}"
+          pod_summaries: >-
+            {{
+              target_pods | map('combine', {}) | list |
+              map(attribute='metadata.name') | list
+            }}
+          pod_phases: >-
+            {{
+              dict(target_pods
+                | map(attribute='metadata.name') | list
+                | zip(target_pods | map(attribute='status.phase') | list))
+            }}
+          warning_events: >-
+            {{
+              ns_events.resources
+              | selectattr('type', 'equalto', 'Warning')
+              | list
+            }}
+          logs_current: "{{ logs_current.results | default([]) | map(attribute='log_lines') | list }}"
+          logs_previous: "{{ logs_previous.results | default([]) | map(attribute='log_lines') | list }}"

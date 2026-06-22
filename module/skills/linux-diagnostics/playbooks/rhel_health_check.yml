@@ -1,0 +1,54 @@
+---
+- name: RHEL host health check (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+  tasks:
+
+    - name: Capture uptime and load average
+      ansible.builtin.command: uptime
+      register: uptime_out
+      changed_when: false
+
+    - name: Capture memory usage
+      ansible.builtin.command: free -h
+      register: free_out
+      changed_when: false
+
+    - name: Capture filesystem usage
+      ansible.builtin.command: df -hT --output=source,fstype,size,used,avail,pcent,target
+      register: df_out
+      changed_when: false
+
+    - name: List failed systemd units
+      ansible.builtin.shell: systemctl --failed --no-legend
+      register: failed_units
+      changed_when: false
+      failed_when: false
+
+    - name: Capture recent kernel messages
+      ansible.builtin.shell: dmesg --since "1 hour ago" | tail -50
+      register: dmesg_out
+      changed_when: false
+      failed_when: false
+
+    - name: Capture OOM kills in the last hour
+      ansible.builtin.shell: journalctl --since "1 hour ago" -k | grep -i "killed process" || true
+      register: oom_out
+      changed_when: false
+
+    - name: Emit structured health report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          os: "{{ ansible_distribution }} {{ ansible_distribution_version }}"
+          kernel: "{{ ansible_kernel }}"
+          uptime: "{{ uptime_out.stdout }}"
+          memory: "{{ free_out.stdout_lines }}"
+          filesystems: "{{ df_out.stdout_lines }}"
+          failed_units: "{{ failed_units.stdout_lines | default([]) }}"
+          recent_dmesg: "{{ dmesg_out.stdout_lines | default([]) }}"
+          oom_kills: "{{ oom_out.stdout_lines | default([]) }}"

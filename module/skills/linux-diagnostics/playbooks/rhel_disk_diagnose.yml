@@ -1,0 +1,70 @@
+---
+- name: Diagnose disk / filesystem pressure (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    fs_threshold_percent: "{{ fs_threshold_percent | default(85) }}"
+  tasks:
+
+    - name: Filesystem usage
+      ansible.builtin.command: df -hT --output=source,fstype,size,used,avail,pcent,target
+      register: df_out
+      changed_when: false
+
+    - name: Inode usage
+      ansible.builtin.command: df -i
+      register: di_out
+      changed_when: false
+
+    - name: Identify filesystems over threshold
+      ansible.builtin.set_fact:
+        hot_filesystems: >-
+          {{
+            df_out.stdout_lines[1:]
+            | map('regex_replace', '\\s+', ' ')
+            | map('split', ' ')
+            | selectattr('5', 'defined')
+            | selectattr('5', 'match', '^[0-9]+%$')
+            | selectattr('5', 'match', '^(8[5-9]|9[0-9]|100)%$')
+            | list
+          }}
+
+    - name: Top 20 largest files under /var
+      ansible.builtin.shell: |
+        set -o pipefail
+        find /var -xdev -type f -printf '%s\t%p\n' 2>/dev/null \
+          | sort -rn | head -20
+      register: var_top
+      changed_when: false
+      failed_when: false
+
+    - name: Top 20 largest directories under /
+      ansible.builtin.shell: |
+        set -o pipefail
+        du -xhd 2 / 2>/dev/null | sort -hr | head -20
+      register: root_top
+      changed_when: false
+      failed_when: false
+
+    - name: Open-but-deleted file handles
+      ansible.builtin.shell: |
+        set -o pipefail
+        lsof -nP 2>/dev/null | awk '/deleted/ {print $1,$2,$NF}' | head -30
+      register: deleted_handles
+      changed_when: false
+      failed_when: false
+
+    - name: Emit structured disk report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          threshold: "{{ fs_threshold_percent }}%"
+          filesystems: "{{ df_out.stdout_lines }}"
+          inodes: "{{ di_out.stdout_lines }}"
+          over_threshold: "{{ hot_filesystems }}"
+          largest_var_files: "{{ var_top.stdout_lines | default([]) }}"
+          largest_root_dirs: "{{ root_top.stdout_lines | default([]) }}"
+          deleted_open_handles: "{{ deleted_handles.stdout_lines | default([]) }}"

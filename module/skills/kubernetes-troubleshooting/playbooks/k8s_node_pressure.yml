@@ -1,0 +1,87 @@
+---
+- name: Diagnose Kubernetes node pressure / NotReady (read-only)
+  hosts: all
+  gather_facts: false
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    kubeconfig_path: "{{ kubeconfig_path | default(ansible_env.KUBECONFIG | default('/root/.kube/config')) }}"
+    node_name: "{{ node_name | default('') }}"
+  tasks:
+
+    - name: All nodes
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: Node
+      register: all_nodes
+
+    - name: Filter target nodes
+      ansible.builtin.set_fact:
+        target_nodes: >-
+          {{
+            all_nodes.resources
+            | selectattr('metadata.name', 'match', (node_name or '.*'))
+            | list
+          }}
+
+    - name: Per-node condition summary
+      ansible.builtin.set_fact:
+        node_conditions: >-
+          {{
+            dict(target_nodes
+              | map(attribute='metadata.name') | list
+              | zip(target_nodes | map(attribute='status.conditions') | list))
+          }}
+
+    - name: Per-node allocatable / capacity
+      ansible.builtin.set_fact:
+        node_resources: >-
+          {{
+            dict(target_nodes
+              | map(attribute='metadata.name') | list
+              | zip(target_nodes
+                    | map(attribute='status')
+                    | map('combine', {})
+                    | list
+                    | map('dict2items') | list
+                    | map('selectattr', 'key', 'in', ['capacity','allocatable'])
+                    | map('list') | list
+                    | map('items2dict') | list))
+          }}
+
+    - name: Recent node-related warning events
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: Event
+        all_namespaces: true
+        field_selectors:
+          - type=Warning
+          - involvedObject.kind=Node
+      register: node_events
+      failed_when: false
+
+    - name: Pods on each target node grouped by phase
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: Pod
+        all_namespaces: true
+        field_selectors:
+          - "spec.nodeName={{ item }}"
+      loop: "{{ target_nodes | map(attribute='metadata.name') | list }}"
+      register: pods_per_node
+
+    - name: Emit node pressure report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          nodes: "{{ target_nodes | map(attribute='metadata.name') | list }}"
+          conditions: "{{ node_conditions }}"
+          resources: "{{ node_resources }}"
+          warning_events: "{{ node_events.resources | default([]) }}"
+          pod_counts_per_node: >-
+            {{
+              dict(target_nodes | map(attribute='metadata.name') | list
+                | zip(pods_per_node.results
+                      | map(attribute='resources')
+                      | map('length') | list))
+            }}

@@ -1,0 +1,48 @@
+---
+- name: DNS resolution check from host (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    target_names: "{{ target_names | mandatory }}"           # list of FQDNs
+    record_types: "{{ record_types | default(['A','AAAA']) }}"
+    nameservers: "{{ nameservers | default([]) }}"           # list of resolver IPs (optional)
+  tasks:
+
+    - name: Resolve via default resolver
+      ansible.builtin.command: "dig +noall +answer +stats {{ item.0 }} {{ item.1 }}"
+      register: dig_default
+      loop: "{{ target_names | product(record_types) | list }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Resolve via explicit nameservers
+      ansible.builtin.command: "dig @{{ item.0 }} +noall +answer +stats {{ item.1 }} {{ item.2 }}"
+      register: dig_explicit
+      loop: "{{ nameservers | product(target_names) | product(record_types) | map('flatten') | list }}"
+      when: nameservers | length > 0
+      changed_when: false
+      failed_when: false
+
+    - name: Reverse lookup any returned IPs
+      ansible.builtin.shell: |
+        set -o pipefail
+        echo "{{ item.stdout }}" | awk '/^[^;]/ {print $NF}' | while read ip; do
+          dig -x "$ip" +short +tries=1 +timeout=2
+        done
+      register: reverse_lookups
+      loop: "{{ dig_default.results }}"
+      loop_control:
+        label: "{{ item.item.0 }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Emit DNS resolution report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          default_resolver: "{{ dig_default.results | map(attribute='stdout_lines') | list }}"
+          explicit_resolvers: "{{ dig_explicit.results | default([]) | map(attribute='stdout_lines') | list }}"
+          reverse_lookups: "{{ reverse_lookups.results | map(attribute='stdout_lines') | list }}"

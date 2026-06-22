@@ -1,0 +1,49 @@
+---
+- name: MTU path probe (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    target: "{{ target | mandatory }}"
+    sizes: "{{ sizes | default([1472, 1400, 1300, 1200, 1000, 500]) }}"
+  tasks:
+
+    - name: Tracepath for MTU discovery
+      ansible.builtin.command: "tracepath -n {{ target }}"
+      register: tp_out
+      changed_when: false
+      failed_when: false
+
+    - name: DF ping at each size
+      ansible.builtin.command: "ping -M do -s {{ item }} -c 2 -W 2 -n {{ target }}"
+      register: df_ping
+      loop: "{{ sizes }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Determine highest size that succeeded
+      ansible.builtin.set_fact:
+        max_pmtu_size: >-
+          {{
+            (df_ping.results
+              | selectattr('rc', 'equalto', 0)
+              | map(attribute='item') | list
+              | max(default=0))
+          }}
+
+    - name: Emit MTU report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          target: "{{ target }}"
+          tracepath: "{{ tp_out.stdout_lines | default([]) }}"
+          per_size_rc: >-
+            {{
+              dict(df_ping.results
+                | map(attribute='item') | list
+                | zip(df_ping.results | map(attribute='rc') | list))
+            }}
+          max_successful_payload: "{{ max_pmtu_size }}"
+          implied_pmtu_bytes: "{{ (max_pmtu_size | int) + 28 if max_pmtu_size != '0' else 'unknown' }}"

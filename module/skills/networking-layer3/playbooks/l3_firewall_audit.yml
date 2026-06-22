@@ -1,0 +1,75 @@
+---
+- name: Host firewall audit (read-only)
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+  tasks:
+
+    - name: Detect firewall backend
+      ansible.builtin.shell: |
+        set -o pipefail
+        if command -v nft >/dev/null 2>&1 && nft list ruleset 2>/dev/null | grep -q .; then
+          echo nftables
+        elif command -v iptables >/dev/null 2>&1; then
+          echo iptables
+        else
+          echo none
+        fi
+      register: fw_backend
+      changed_when: false
+
+    - name: Nftables ruleset
+      ansible.builtin.command: nft -a list ruleset
+      register: nft_out
+      when: fw_backend.stdout == 'nftables'
+      changed_when: false
+      failed_when: false
+
+    - name: Iptables filter table
+      ansible.builtin.command: iptables -L -n -v --line-numbers
+      register: ipt_filter
+      when: fw_backend.stdout == 'iptables'
+      changed_when: false
+      failed_when: false
+
+    - name: Iptables NAT table
+      ansible.builtin.command: iptables -t nat -L -n -v --line-numbers
+      register: ipt_nat
+      when: fw_backend.stdout == 'iptables'
+      changed_when: false
+      failed_when: false
+
+    - name: Firewalld zones (if active)
+      ansible.builtin.shell: |
+        set -o pipefail
+        if systemctl is-active --quiet firewalld; then
+          firewall-cmd --list-all-zones
+        else
+          echo "firewalld inactive"
+        fi
+      register: firewalld_out
+      changed_when: false
+      failed_when: false
+
+    - name: Recent firewall log drops
+      ansible.builtin.shell: |
+        set -o pipefail
+        journalctl --since "1 hour ago" -k 2>/dev/null \
+          | grep -iE 'iptables|nft|drop|reject' | tail -50 || true
+      register: fw_log
+      changed_when: false
+      failed_when: false
+
+    - name: Emit firewall audit report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          backend: "{{ fw_backend.stdout }}"
+          nftables: "{{ nft_out.stdout_lines | default([]) }}"
+          iptables_filter: "{{ ipt_filter.stdout_lines | default([]) }}"
+          iptables_nat: "{{ ipt_nat.stdout_lines | default([]) }}"
+          firewalld: "{{ firewalld_out.stdout_lines | default([]) }}"
+          recent_drops: "{{ fw_log.stdout_lines | default([]) }}"

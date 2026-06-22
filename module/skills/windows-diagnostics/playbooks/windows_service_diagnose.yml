@@ -1,0 +1,63 @@
+---
+- name: Diagnose a Windows service (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    service_name: "{{ service_name | mandatory }}"
+    log_window_hours: "{{ log_window_hours | default(1) }}"
+  tasks:
+
+    - name: Service detail
+      ansible.windows.win_service_info:
+        name: "{{ service_name }}"
+      register: svc_info
+      failed_when: false
+
+    - name: Process detail (if service has a PID)
+      ansible.windows.win_shell: |
+        $svc = Get-CimInstance Win32_Service -Filter "Name='{{ service_name }}'"
+        if ($null -ne $svc -and $svc.ProcessId -gt 0) {
+          Get-Process -Id $svc.ProcessId |
+            Select-Object Id, Name, CPU, WorkingSet64, Handles, Threads, StartTime |
+            Format-List | Out-String
+        } else {
+          "no running process for {{ service_name }}"
+        }
+      register: svc_proc
+      changed_when: false
+      failed_when: false
+
+    - name: Recent service-related events
+      ansible.windows.win_shell: |
+        $since = (Get-Date).AddHours(-{{ log_window_hours }})
+        Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'; StartTime=$since} |
+          Where-Object { $_.Message -match '{{ service_name }}' } |
+          Select-Object TimeCreated, Id, LevelDisplayName, Message |
+          Format-Table -AutoSize -Wrap | Out-String
+      register: svc_events
+      changed_when: false
+      failed_when: false
+
+    - name: Application log errors mentioning the service
+      ansible.windows.win_shell: |
+        $since = (Get-Date).AddHours(-{{ log_window_hours }})
+        Get-WinEvent -FilterHashtable @{LogName='Application'; Level=1,2; StartTime=$since} |
+          Where-Object { $_.Message -match '{{ service_name }}' } |
+          Select-Object TimeCreated, Id, ProviderName, Message |
+          Format-Table -AutoSize -Wrap | Out-String
+      register: app_events
+      changed_when: false
+      failed_when: false
+
+    - name: Emit structured service report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          service: "{{ service_name }}"
+          service_info: "{{ svc_info.services | default([]) }}"
+          process: "{{ svc_proc.stdout_lines | default([]) }}"
+          service_events: "{{ svc_events.stdout_lines | default([]) }}"
+          app_events: "{{ app_events.stdout_lines | default([]) }}"

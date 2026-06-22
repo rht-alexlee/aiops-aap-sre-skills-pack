@@ -1,0 +1,63 @@
+---
+- name: ARP / NDP table audit (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    target_ip: "{{ target_ip | default('') }}"
+  tasks:
+
+    - name: Full neighbour table (IPv4 + IPv6)
+      ansible.builtin.command: ip -j neigh show
+      register: neigh
+      changed_when: false
+
+    - name: Parse neighbours
+      ansible.builtin.set_fact:
+        neigh_list: "{{ neigh.stdout | from_json }}"
+
+    - name: Stale or failed neighbours
+      ansible.builtin.set_fact:
+        unhealthy_neighbours: >-
+          {{
+            neigh_list
+            | rejectattr('state', 'undefined')
+            | selectattr('state', 'intersect', ['FAILED','INCOMPLETE','STALE'])
+            | list
+          }}
+
+    - name: Duplicate MAC detection
+      ansible.builtin.set_fact:
+        mac_counts: >-
+          {{
+            dict(neigh_list
+                 | rejectattr('lladdr', 'undefined')
+                 | map(attribute='lladdr') | list
+                 | unique
+                 | zip(neigh_list
+                       | rejectattr('lladdr', 'undefined')
+                       | map(attribute='lladdr') | list
+                       | unique
+                       | map('extract', neigh_list
+                             | rejectattr('lladdr', 'undefined')
+                             | map(attribute='lladdr') | list) | list))
+          }}
+
+    - name: Probe specific target IP
+      ansible.builtin.command: "arping -c 2 -w 2 {{ target_ip }}"
+      register: arping_out
+      when: target_ip | length > 0
+      changed_when: false
+      failed_when: false
+
+    - name: Emit L2 ARP report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          neighbour_count: "{{ neigh_list | length }}"
+          unhealthy_neighbours: "{{ unhealthy_neighbours }}"
+          mac_counts_sample: "{{ neigh_list[:50] | default([]) }}"
+          probe_target: "{{ target_ip }}"
+          arping: "{{ arping_out.stdout_lines | default([]) }}"

@@ -1,0 +1,64 @@
+---
+- name: Kubernetes cluster health snapshot (read-only)
+  hosts: all
+  gather_facts: false
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    kubeconfig_path: "{{ kubeconfig_path | default(ansible_env.KUBECONFIG | default('/root/.kube/config')) }}"
+  tasks:
+
+    - name: Nodes
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: Node
+      register: nodes_info
+
+    - name: Cluster-wide warning events (last hour)
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: Event
+        all_namespaces: true
+        field_selectors:
+          - type=Warning
+      register: warn_events
+
+    - name: Component statuses (legacy clusters)
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: ComponentStatus
+      register: cs_info
+      failed_when: false
+
+    - name: Namespaces with non-Active phase
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: Namespace
+      register: ns_info
+
+    - name: Emit cluster health report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          bastion: "{{ inventory_hostname }}"
+          nodes:
+            count: "{{ nodes_info.resources | length }}"
+            not_ready: >-
+              {{
+                nodes_info.resources
+                | rejectattr('status.conditions', 'undefined')
+                | rejectattr('status.conditions',
+                             'search', '\"type\": \"Ready\".*\"status\": \"True\"')
+                | map(attribute='metadata.name') | list
+              }}
+          warning_events_count: "{{ warn_events.resources | length }}"
+          warning_events_sample: "{{ warn_events.resources[:20] | default([]) }}"
+          component_statuses: "{{ cs_info.resources | default([]) }}"
+          namespaces:
+            count: "{{ ns_info.resources | length }}"
+            non_active: >-
+              {{
+                ns_info.resources
+                | rejectattr('status.phase', 'equalto', 'Active')
+                | map(attribute='metadata.name') | list
+              }}

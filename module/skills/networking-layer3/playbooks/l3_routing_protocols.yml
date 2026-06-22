@@ -1,0 +1,62 @@
+---
+- name: Dynamic routing protocol state (FRR / Quagga, read-only)
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    protocols: "{{ protocols | default(['ospf', 'bgp']) }}"
+  tasks:
+
+    - name: Detect vtysh
+      ansible.builtin.command: which vtysh
+      register: vtysh_path
+      changed_when: false
+      failed_when: false
+
+    - name: OSPF neighbours
+      ansible.builtin.command: vtysh -c "show ip ospf neighbor"
+      register: ospf_nbr
+      when: vtysh_path.rc == 0 and 'ospf' in protocols
+      changed_when: false
+      failed_when: false
+
+    - name: OSPF route table
+      ansible.builtin.command: vtysh -c "show ip route ospf"
+      register: ospf_route
+      when: vtysh_path.rc == 0 and 'ospf' in protocols
+      changed_when: false
+      failed_when: false
+
+    - name: BGP summary
+      ansible.builtin.command: vtysh -c "show bgp summary"
+      register: bgp_summary
+      when: vtysh_path.rc == 0 and 'bgp' in protocols
+      changed_when: false
+      failed_when: false
+
+    - name: BGP neighbour detail
+      ansible.builtin.command: vtysh -c "show bgp neighbors"
+      register: bgp_nbr
+      when: vtysh_path.rc == 0 and 'bgp' in protocols
+      changed_when: false
+      failed_when: false
+
+    - name: FRR daemon status
+      ansible.builtin.command: systemctl status frr --no-pager
+      register: frr_status
+      when: vtysh_path.rc == 0
+      changed_when: false
+      failed_when: false
+
+    - name: Emit routing-protocol report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          vtysh_present: "{{ vtysh_path.rc == 0 }}"
+          ospf_neighbors: "{{ ospf_nbr.stdout_lines | default([]) }}"
+          ospf_routes: "{{ ospf_route.stdout_lines | default([]) }}"
+          bgp_summary: "{{ bgp_summary.stdout_lines | default([]) }}"
+          bgp_neighbors: "{{ bgp_nbr.stdout_lines | default([]) }}"
+          frr_status: "{{ frr_status.stdout_lines | default([]) }}"

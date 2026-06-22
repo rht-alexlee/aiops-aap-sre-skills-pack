@@ -1,0 +1,72 @@
+---
+- name: Windows host health check (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+  tasks:
+
+    - name: Uptime
+      ansible.windows.win_shell: |
+        $u = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+        "{0} (booted {1:yyyy-MM-dd HH:mm:ss})" -f ((Get-Date) - $u), $u
+      register: uptime_out
+      changed_when: false
+
+    - name: Stopped services that should be auto-start
+      ansible.windows.win_shell: |
+        Get-CimInstance Win32_Service |
+          Where-Object { $_.StartMode -eq 'Auto' -and $_.State -ne 'Running' } |
+          Select-Object Name, DisplayName, State, StartMode |
+          Format-Table -AutoSize | Out-String
+      register: stopped_svcs
+      changed_when: false
+      failed_when: false
+
+    - name: Drive free space
+      ansible.windows.win_shell: |
+        Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" |
+          Select-Object DeviceID,
+            @{N='SizeGB'; E={[math]::Round($_.Size/1GB,1)}},
+            @{N='FreeGB'; E={[math]::Round($_.FreeSpace/1GB,1)}},
+            @{N='PctFree'; E={[math]::Round(($_.FreeSpace/$_.Size)*100,1)}} |
+          Format-Table -AutoSize | Out-String
+      register: disk_out
+      changed_when: false
+
+    - name: Recent System log errors (last hour, top 20)
+      ansible.windows.win_shell: |
+        $since = (Get-Date).AddHours(-1)
+        Get-WinEvent -FilterHashtable @{LogName='System'; Level=1,2; StartTime=$since} |
+          Select-Object TimeCreated, Id, ProviderName, LevelDisplayName, Message |
+          Sort-Object TimeCreated -Descending | Select-Object -First 20 |
+          Format-Table -AutoSize -Wrap | Out-String
+      register: system_errors
+      changed_when: false
+      failed_when: false
+
+    - name: Memory and CPU snapshot
+      ansible.windows.win_shell: |
+        $os = Get-CimInstance Win32_OperatingSystem
+        $cs = Get-CimInstance Win32_ComputerSystem
+        $cpu = (Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 1 -MaxSamples 3).CounterSamples |
+                Measure-Object -Property CookedValue -Average
+        [PSCustomObject]@{
+          TotalGB     = [math]::Round($cs.TotalPhysicalMemory/1GB,1)
+          FreeGB      = [math]::Round($os.FreePhysicalMemory/1MB,1)
+          AvgCpuPct   = [math]::Round($cpu.Average,1)
+        } | Format-List | Out-String
+      register: perf_out
+      changed_when: false
+
+    - name: Emit structured health report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          uptime: "{{ uptime_out.stdout_lines }}"
+          stopped_auto_services: "{{ stopped_svcs.stdout_lines | default([]) }}"
+          disk_free: "{{ disk_out.stdout_lines }}"
+          system_errors_1h: "{{ system_errors.stdout_lines | default([]) }}"
+          perf_snapshot: "{{ perf_out.stdout_lines }}"

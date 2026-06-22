@@ -1,0 +1,24 @@
+---
+profile: production
+
+exclude_paths:
+  - .cache/
+  - .github/
+
+# Diagnostic playbooks intentionally use ad-hoc fact gathering and
+# free-form command/shell modules; relax the strictest rules.
+skip_list:
+  - command-instead-of-shell
+  - command-instead-of-module
+  - no-changed-when
+  - risky-shell-pipe
+  - fqcn[action-core]
+  - schema[meta]
+  - jinja[invalid]
+
+warn_list:
+  - experimental
+  - jinja[spacing]
+
+kinds:
+  - playbook: "**/playbooks/*.yml"

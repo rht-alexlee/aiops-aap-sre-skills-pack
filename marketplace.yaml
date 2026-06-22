@@ -1,0 +1,21 @@
+name: "AIOps AAP SRE Marketplace"
+description: "Lola marketplace exposing the AIOps SRE skill pack — domain diagnostic agents plus the AAP playbook executor."
+version: "0.1.0"
+
+modules:
+  - name: "aiops-aap-sre-skills-pack"
+    description: "Multi-domain SRE sub-agents (RHEL, Windows, Kubernetes, Networking) that diagnose issues and run remediation through Ansible AAP."
+    version: "0.1.0"
+    repository: "https://github.com/rht-alexlee/aiops-aap-sre-skills-pack.git"
+    path: "module"
+    tags:
+      - "sre"
+      - "aiops"
+      - "ansible"
+      - "aap"
+      - "rhel"
+      - "windows"
+      - "kubernetes"
+      - "networking"
+      - "diagnostics"
+      - "remediation"

@@ -1,0 +1,50 @@
+---
+- name: Diagnose Windows disk pressure (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    drive_letter: "{{ drive_letter | default('C') }}"
+    top_n: "{{ top_n | default(20) }}"
+  tasks:
+
+    - name: Logical disk summary
+      ansible.windows.win_shell: |
+        Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" |
+          Select-Object DeviceID,
+            @{N='SizeGB'; E={[math]::Round($_.Size/1GB,1)}},
+            @{N='FreeGB'; E={[math]::Round($_.FreeSpace/1GB,1)}},
+            @{N='PctFree'; E={[math]::Round(($_.FreeSpace/$_.Size)*100,1)}} |
+          Format-Table -AutoSize | Out-String
+      register: disk_summary
+      changed_when: false
+
+    - name: "List largest files on the target drive (top {{ top_n }})"
+      ansible.windows.win_shell: |
+        $root = "{{ drive_letter }}" + ":" + [IO.Path]::DirectorySeparatorChar
+        Get-ChildItem -LiteralPath $root -Recurse -File -ErrorAction SilentlyContinue |
+          Sort-Object Length -Descending |
+          Select-Object -First {{ top_n }} FullName,
+            @{N='SizeMB'; E={[math]::Round($_.Length/1MB,1)}} |
+          Format-Table -AutoSize | Out-String
+      register: top_files
+      changed_when: false
+      failed_when: false
+
+    - name: Windows component store size
+      ansible.windows.win_shell: |
+        Dism.exe /Online /Cleanup-Image /AnalyzeComponentStore
+      register: winsxs_out
+      changed_when: false
+      failed_when: false
+
+    - name: Emit structured disk report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          drive: "{{ drive_letter }}"
+          disks: "{{ disk_summary.stdout_lines }}"
+          top_files: "{{ top_files.stdout_lines | default([]) }}"
+          winsxs_analysis: "{{ winsxs_out.stdout_lines | default([]) }}"

@@ -1,0 +1,63 @@
+---
+- name: Performance snapshot — CPU, memory, IO, top processes (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    sample_count: "{{ sample_count | default(5) }}"
+    sample_interval: "{{ sample_interval | default(2) }}"
+  tasks:
+
+    - name: Vmstat samples
+      ansible.builtin.command: "vmstat {{ sample_interval }} {{ sample_count }}"
+      register: vmstat_out
+      changed_when: false
+
+    - name: Iostat extended samples
+      ansible.builtin.command: "iostat -xz {{ sample_interval }} {{ sample_count }}"
+      register: iostat_out
+      changed_when: false
+      failed_when: false
+
+    - name: Top 15 processes by CPU
+      ansible.builtin.shell: |
+        set -o pipefail
+        ps -eo pid,ppid,user,pcpu,pmem,etime,cmd --sort=-pcpu | head -16
+      register: top_cpu
+      changed_when: false
+
+    - name: Top 15 processes by memory
+      ansible.builtin.shell: |
+        set -o pipefail
+        ps -eo pid,ppid,user,pcpu,pmem,rss,cmd --sort=-rss | head -16
+      register: top_mem
+      changed_when: false
+
+    - name: Run queue / context switches
+      ansible.builtin.shell: |
+        set -o pipefail
+        cat /proc/loadavg
+        grep -E '^(ctxt|processes|procs_running|procs_blocked) ' /proc/stat
+      register: loadinfo
+      changed_when: false
+
+    - name: Network socket summary
+      ansible.builtin.shell: |
+        set -o pipefail
+        ss -s
+      register: ss_summary
+      changed_when: false
+      failed_when: false
+
+    - name: Emit structured perf report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          vmstat: "{{ vmstat_out.stdout_lines }}"
+          iostat: "{{ iostat_out.stdout_lines | default([]) }}"
+          top_by_cpu: "{{ top_cpu.stdout_lines }}"
+          top_by_mem: "{{ top_mem.stdout_lines }}"
+          load_info: "{{ loadinfo.stdout_lines }}"
+          socket_summary: "{{ ss_summary.stdout_lines | default([]) }}"

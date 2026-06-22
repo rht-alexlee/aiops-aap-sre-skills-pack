@@ -1,0 +1,74 @@
+---
+- name: Layer-2 link state check (read-only)
+  hosts: all
+  gather_facts: true
+  become: false
+  vars:
+    incident_slug: "{{ incident_slug | default('unscoped') }}"
+    interfaces: "{{ interfaces | default([]) }}"     # empty = all
+  tasks:
+
+    - name: Enumerate links
+      ansible.builtin.command: ip -j -d link show
+      register: links_json
+      changed_when: false
+
+    - name: Parse link list
+      ansible.builtin.set_fact:
+        all_links: "{{ links_json.stdout | from_json }}"
+
+    - name: Target interface list
+      ansible.builtin.set_fact:
+        target_ifaces: >-
+          {{
+            (interfaces if (interfaces | length > 0)
+             else (all_links | map(attribute='ifname') | reject('equalto','lo') | list))
+          }}
+
+    - name: Ethtool per interface
+      ansible.builtin.command: "ethtool {{ item }}"
+      register: ethtool_out
+      loop: "{{ target_ifaces }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Ethtool counters per interface
+      ansible.builtin.command: "ethtool -S {{ item }}"
+      register: ethtool_stats
+      loop: "{{ target_ifaces }}"
+      changed_when: false
+      failed_when: false
+
+    - name: Carrier transitions
+      ansible.builtin.shell: |
+        set -o pipefail
+        for i in {{ target_ifaces | join(' ') }}; do
+          changes=$(cat /sys/class/net/"$i"/carrier_changes 2>/dev/null || echo NA)
+          state=$(cat /sys/class/net/"$i"/operstate 2>/dev/null || echo NA)
+          echo "$i carrier_changes=$changes operstate=$state"
+        done
+      register: carrier
+      changed_when: false
+      failed_when: false
+
+    - name: Emit L2 link report
+      ansible.builtin.debug:
+        msg:
+          incident_slug: "{{ incident_slug }}"
+          host: "{{ inventory_hostname }}"
+          interfaces: "{{ target_ifaces }}"
+          link_summary: >-
+            {{
+              all_links
+              | selectattr('ifname', 'in', target_ifaces)
+              | map(attribute='operstate') | list
+            }}
+          ethtool: "{{ ethtool_out.results | map(attribute='stdout_lines') | list }}"
+          ethtool_stats_excerpt: >-
+            {{
+              ethtool_stats.results
+              | map(attribute='stdout_lines')
+              | map('select', 'search', '(error|drop|crc|carrier)')
+              | map('list') | list
+            }}
+          carrier: "{{ carrier.stdout_lines | default([]) }}"
